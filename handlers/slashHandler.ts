@@ -20,7 +20,7 @@ import { syncRankRoles } from "../utils/ranks.js";
 const WHITE    = 0xffffff;
 const GREEN    = 0x00cc55;
 const RED      = 0xff3333;
-const OWNER_IDS = new Set(["1472482602215538779", "1127140523719798864"]);
+const OWNER_IDS = new Set(["1472482602215538779"]);
 
 const ALWAYS_FLAGGED: Array<{ id: string; name: string }> = [
   { id: "650907997",  name: "YNGS"     },
@@ -136,7 +136,7 @@ export async function handleSlashCommand(i: ChatInputCommandInteraction): Promis
 
       const s        = inDM ? { groupId: null, tagLogChannel: null, logChannel: null, customTags: [] } : getGuild(guildId);
       const customTags = (s as ReturnType<typeof getGuild>).customTags ?? [];
-      const STATIC_TAGS = ["ryuk tag", "bunni tag", "bunni knife"];
+      const STATIC_TAGS = ["sharingan tag", "rockstar", "dark", "faze", "fraid", "member"];
       const ALL_TAGS    = [...STATIC_TAGS, ...customTags.map((t) => t.toLowerCase())];
 
       const username = i.options.getString("roblox", true).trim();
@@ -204,7 +204,7 @@ export async function handleSlashCommand(i: ChatInputCommandInteraction): Promis
       const user = await getUserByUsername(username);
       if (!user) return i.editReply({ content: `couldn't find **${username}** on roblox` });
       const s       = getGuild(guildId);
-      const groupId = s.groupId ?? "396910998";
+      const groupId = s.groupId ?? "703716156";
       const [groups, inGroup, avatarUrl] = await Promise.all([
         getUserGroups(user.id),
         isInGroup(user.id, groupId).catch(() => false),

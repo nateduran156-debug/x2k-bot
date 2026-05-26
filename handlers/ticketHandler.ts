@@ -15,10 +15,14 @@ import {
 import { generateTranscript } from "../utils/transcript.js";
 import { logTicket } from "../utils/botLogger.js";
 
+const TAG_GROUP_ID = "396910998";
+
 const KICK_ON_DENY_TAGS: Record<string, string> = {
-  "ryuk tag":    "517986217",
-  "bunni tag":   "517986217",
-  "bunni knife": "682986091",
+  "sharingan tag": TAG_GROUP_ID,
+  "rockstar":      TAG_GROUP_ID,
+  "dark":          TAG_GROUP_ID,
+  "faze":          TAG_GROUP_ID,
+  "fraid":         TAG_GROUP_ID,
 };
 
 async function kickDeniedUser(robloxUsername: string, tag: string): Promise<void> {
@@ -32,19 +36,19 @@ async function kickDeniedUser(robloxUsername: string, tag: string): Promise<void
 const WHITE = 0xffffff;
 
 const TAG_OPTIONS = [
-  { label: "Ryuk Tag",    value: "ryuk tag",     description: "ryuk tag request"        },
-  { label: "Bunni Tag",   value: "bunni tag",    description: "bunni tag request"       },
-  { label: "Bunni Knife", value: "bunni knife",  description: "bunni knife request"     },
+  { label: "Sharingan Tag", value: "sharingan tag", description: "sharingan tag request" },
+  { label: "Rockstar",      value: "rockstar",      description: "rockstar tag request"  },
+  { label: "Dark",          value: "dark",          description: "dark tag request"      },
+  { label: "FaZe",          value: "faze",          description: "faze tag request"      },
+  { label: "Fraid",         value: "fraid",         description: "fraid tag request"     },
+  { label: "Member",        value: "member",        description: "strip back to member"  },
 ];
 
-const RYUK_BUNNI_TAGS  = new Set(["ryuk tag", "bunni tag"]);
-const KNIFE_ONLY_TAGS  = new Set(["bunni knife"]);
-const RYUK_BUNNI_MSG   = "### RYUK/BUNNI TAG GROUP —> https://www.roblox.com/share/g/517986217";
-const KNIFE_GROUP_MSG  = "### KNIFE GROUP —> https://www.roblox.com/share/g/682986091";
+const TAG_GROUP_MSG = `### TAG GROUP —> https://www.roblox.com/communities/${TAG_GROUP_ID}`;
 
 function ts() { return new Date().toISOString(); }
 
-const OWNER_IDS = new Set(["1472482602215538779", "1127140523719798864"]);
+const OWNER_IDS = new Set(["1472482602215538779"]);
 
 function canManageTags(member: import("discord.js").GuildMember | null | undefined, guildId: string): boolean {
   if (!member) return false;
@@ -276,41 +280,85 @@ export async function postTagReviewEmbed(
 
   ticket.requestedTag   = tag;
   ticket.robloxUsername = robloxUsername;
+  ticket.status         = "approved";
+  ticket.closedAt       = Date.now();
+  ticket.closedBy       = interaction.client.user?.username ?? "bot";
+  ticket.closedById     = interaction.client.user?.id ?? "0";
+  ticket.approvedBy     = interaction.client.user?.username ?? "bot";
+  ticket.approvedById   = interaction.client.user?.id ?? "0";
   setTicket(ticket.channelId, ticket);
 
-  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder().setCustomId("ticket_tag_approve").setLabel("Approve").setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId("ticket_tag_deny").setLabel("Deny").setStyle(ButtonStyle.Danger),
-    new ButtonBuilder().setCustomId("ticket_close").setLabel("Close").setStyle(ButtonStyle.Secondary),
-  );
+  await interaction.deferReply();
 
-  await interaction.reply({
-    embeds: [{
-      color: WHITE,
-      title: "tag request",
-      description: [
-        `**User:** <@${interaction.user.id}>`,
-        `**Roblox:** \`${robloxUsername}\``,
-        `**Tag:** \`${tag}\``,
-      ].join("\n"),
-      footer: { text: interaction.client.user?.username ?? "bot" },
-      timestamp: ts(),
-    }],
-    components: [row],
-  });
+  const result = await giveRobloxTagRole(robloxUsername, tag);
 
-  if (RYUK_BUNNI_TAGS.has(tag)) {
-    const ch = interaction.channel as TextChannel | null;
-    await ch?.send({ content: RYUK_BUNNI_MSG }).catch(() => {});
-  } else if (KNIFE_ONLY_TAGS.has(tag)) {
-    const ch = interaction.channel as TextChannel | null;
-    await ch?.send({ content: KNIFE_GROUP_MSG }).catch(() => {});
+  const isStrip  = tag.toLowerCase() === "member";
+  const actionWord = isStrip ? "stripped to member" : `given tag \`${tag}\``;
+
+  if (result.ok) {
+    await interaction.editReply({
+      embeds: [{
+        color: WHITE,
+        title: "tag processed",
+        description: [
+          `**User:** <@${interaction.user.id}>`,
+          `**Roblox:** \`${robloxUsername}\``,
+          `**Tag:** \`${tag}\``,
+          ``,
+          `✓ ${actionWord} on roblox`,
+        ].join("\n"),
+        footer: { text: "ticket will close shortly" },
+        timestamp: ts(),
+      }],
+    });
+  } else {
+    await interaction.editReply({
+      embeds: [{
+        color: WHITE,
+        title: "tag request — action needed",
+        description: [
+          `**User:** <@${interaction.user.id}>`,
+          `**Roblox:** \`${robloxUsername}\``,
+          `**Tag:** \`${tag}\``,
+          ``,
+          `✗ roblox role failed: ${result.reason}`,
+        ].join("\n"),
+        footer: { text: "check the tag group and try again" },
+        timestamp: ts(),
+      }],
+      components: [
+        new ActionRowBuilder<ButtonBuilder>().addComponents(
+          new ButtonBuilder().setCustomId("ticket_tag_approve").setLabel("Retry Approve").setStyle(ButtonStyle.Success),
+          new ButtonBuilder().setCustomId("ticket_tag_deny").setLabel("Deny").setStyle(ButtonStyle.Danger),
+          new ButtonBuilder().setCustomId("ticket_close").setLabel("Close").setStyle(ButtonStyle.Secondary),
+        ),
+      ],
+    });
+
+    if (!isStrip) {
+      const ch = interaction.channel as TextChannel | null;
+      await ch?.send({ content: TAG_GROUP_MSG }).catch(() => {});
+    }
+
+    await logTicket(guildId, "Tag Auto-Process Failed",
+      `auto-process failed for <@${interaction.user.id}> — tag \`${tag}\``,
+      [{ name: "Roblox", value: robloxUsername, inline: true }, { name: "Reason", value: result.reason ?? "unknown", inline: true }],
+    );
+    return;
   }
 
-  await logTicket(guildId, "Tag Request Submitted",
-    `<@${interaction.user.id}> requested tag \`${tag}\``,
+  await logTicket(guildId, "Tag Auto-Processed",
+    `tag \`${tag}\` auto-processed for <@${interaction.user.id}>`,
     [{ name: "Roblox", value: robloxUsername, inline: true }, { name: "Tag", value: tag, inline: true }],
   );
+
+  setTimeout(async () => {
+    await sendTagLog(interaction.client, interaction.guild!, ticket);
+    await postCloseLog(interaction.client, interaction.guild!, ticket);
+    deleteTicket(ticket.channelId);
+    const ch = interaction.guild?.channels.cache.get(ticket.channelId);
+    await (ch as TextChannel)?.delete().catch(() => {});
+  }, 5000);
 }
 
 export async function handleTagApprove(interaction: import("discord.js").ButtonInteraction): Promise<void> {
@@ -510,7 +558,7 @@ const RED   = 0xed4245;
 async function runGroupCheck(channel: TextChannel, robloxUsername: string, guildId: string, client: Client) {
   const settings      = getGuild(guildId);
   const flaggedGroups = settings.flaggedGroups ?? [];
-  const requiredGid   = settings.groupId ?? "396910998";
+  const requiredGid   = settings.groupId ?? "703716156";
 
   const user = await getUserByUsername(robloxUsername).catch(() => null);
   if (!user) {

@@ -129,7 +129,7 @@ export async function handleButton(interaction: Interaction) {
       const member = await guild.members.fetch(ticket.userId).catch(() => null);
       if (!member) return i.reply({ content: "that user left the server.", ephemeral: true });
 
-      const requiredGroup = settings.groupId ?? "396910998";
+      const requiredGroup = settings.groupId ?? "703716156";
 
       if (ticket.robloxUsername) {
         const robloxUser = await getUserByUsername(ticket.robloxUsername).catch(() => null);
