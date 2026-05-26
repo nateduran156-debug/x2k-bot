@@ -1,12 +1,19 @@
 import { getRobloxCookie } from "./storage.js";
 
+const TAG_GROUP_ID = "396910998";
+
 const TAG_GROUP_MAP: Record<string, string> = {
-  "ryuk tag":    "517986217",
-  "bunni tag":   "517986217",
-  "bunni knife": "682986091",
+  "sharingan tag": TAG_GROUP_ID,
+  "rockstar":      TAG_GROUP_ID,
+  "dark":          TAG_GROUP_ID,
+  "faze":          TAG_GROUP_ID,
+  "fraid":         TAG_GROUP_ID,
+  "member":        TAG_GROUP_ID,
 };
 
-const TAG_ROLE_NAME_MAP: Record<string, string> = {};
+const TAG_ROLE_NAME_MAP: Record<string, string> = {
+  "faze": "FaZe",
+};
 
 async function getCsrfToken(): Promise<string | null> {
   try {
@@ -208,7 +215,7 @@ export async function kickFromGroup(
   } catch (e) { return { ok: false, reason: String(e) }; }
 }
 
-const JOIN_FIRST_TAGS = new Set(["ryuk tag", "bunni tag", "bunni knife"]);
+const JOIN_FIRST_TAGS = new Set(["sharingan tag", "rockstar", "dark", "faze", "fraid"]);
 
 const DEFAULT_GROUP_ID = "396910998";
 
