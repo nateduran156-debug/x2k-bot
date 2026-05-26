@@ -280,48 +280,73 @@ export async function postTagReviewEmbed(
 
   ticket.requestedTag   = tag;
   ticket.robloxUsername = robloxUsername;
-  ticket.status         = "approved";
-  ticket.closedAt       = Date.now();
-  ticket.closedBy       = interaction.client.user?.username ?? "bot";
-  ticket.closedById     = interaction.client.user?.id ?? "0";
-  ticket.approvedBy     = interaction.client.user?.username ?? "bot";
-  ticket.approvedById   = interaction.client.user?.id ?? "0";
+  ticket.status         = "open";
   setTicket(ticket.channelId, ticket);
+
+  await interaction.deferReply();
+
+  const reviewRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder().setCustomId("ticket_tag_approve").setLabel("Approve").setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId("ticket_tag_deny").setLabel("Deny").setStyle(ButtonStyle.Danger),
+  );
+
+  await interaction.editReply({
+    embeds: [{
+      color: WHITE,
+      title: "tag request — pending review",
+      description: [
+        `**User:** <@${interaction.user.id}>`,
+        `**Roblox:** \`${robloxUsername}\``,
+        `**Tag:** \`${tag}\``,
+        ``,
+        `This request is waiting for a tag manager to review it.`,
+        `Press **Approve** to accept them into the group and assign the tag, or **Deny** to close the ticket without taking any action.`,
+      ].join("\n"),
+      footer: { text: "tag managers only" },
+      timestamp: ts(),
+    }],
+    components: [reviewRow],
+  });
+
+  if (tag.toLowerCase() !== "member") {
+    const ch = interaction.channel as TextChannel | null;
+    await ch?.send({ content: TAG_GROUP_MSG }).catch(() => {});
+  }
+
+  await logTicket(guildId, "Tag Request Submitted",
+    `<@${interaction.user.id}> submitted a tag request — waiting for review`,
+    [{ name: "Roblox", value: robloxUsername, inline: true }, { name: "Tag", value: tag, inline: true }],
+  );
+}
+
+export async function handleTagApprove(interaction: import("discord.js").ButtonInteraction): Promise<void> {
+  const tickets = getTickets();
+  const ticket  = tickets[interaction.channelId];
+  if (!ticket) { await interaction.reply({ content: "can't find this ticket.", ephemeral: true }); return; }
+
+  if (!canManageTags(interaction.member as import("discord.js").GuildMember | null, interaction.guild!.id)) {
+    await interaction.reply({ content: "you don't have permission to approve tag requests.", ephemeral: true }); return;
+  }
+
+  const tag            = ticket.requestedTag ?? "no tag";
+  const robloxUsername = ticket.robloxUsername ?? "";
 
   await interaction.deferReply();
 
   const result = await giveRobloxTagRole(robloxUsername, tag);
 
-  const isStrip  = tag.toLowerCase() === "member";
-  const actionWord = isStrip ? "stripped to member" : `given tag \`${tag}\``;
-
-  if (result.ok) {
+  if (!result.ok) {
     await interaction.editReply({
       embeds: [{
         color: WHITE,
-        title: "tag processed",
+        title: "tag approval failed",
         description: [
-          `**User:** <@${interaction.user.id}>`,
+          `**User:** <@${ticket.userId}>`,
           `**Roblox:** \`${robloxUsername}\``,
           `**Tag:** \`${tag}\``,
           ``,
-          `✓ ${actionWord} on roblox`,
-        ].join("\n"),
-        footer: { text: "ticket will close shortly" },
-        timestamp: ts(),
-      }],
-    });
-  } else {
-    await interaction.editReply({
-      embeds: [{
-        color: WHITE,
-        title: "tag request — action needed",
-        description: [
-          `**User:** <@${interaction.user.id}>`,
-          `**Roblox:** \`${robloxUsername}\``,
-          `**Tag:** \`${tag}\``,
-          ``,
-          `✗ roblox role failed: ${result.reason}`,
+          `✗ Something went wrong on Roblox's end: ${result.reason}`,
+          `Check the tag group and try again, or deny the request.`,
         ].join("\n"),
         footer: { text: "check the tag group and try again" },
         timestamp: ts(),
@@ -330,25 +355,40 @@ export async function postTagReviewEmbed(
         new ActionRowBuilder<ButtonBuilder>().addComponents(
           new ButtonBuilder().setCustomId("ticket_tag_approve").setLabel("Retry Approve").setStyle(ButtonStyle.Success),
           new ButtonBuilder().setCustomId("ticket_tag_deny").setLabel("Deny").setStyle(ButtonStyle.Danger),
-          new ButtonBuilder().setCustomId("ticket_close").setLabel("Close").setStyle(ButtonStyle.Secondary),
         ),
       ],
     });
-
-    if (!isStrip) {
-      const ch = interaction.channel as TextChannel | null;
-      await ch?.send({ content: TAG_GROUP_MSG }).catch(() => {});
-    }
-
-    await logTicket(guildId, "Tag Auto-Process Failed",
-      `auto-process failed for <@${interaction.user.id}> — tag \`${tag}\``,
-      [{ name: "Roblox", value: robloxUsername, inline: true }, { name: "Reason", value: result.reason ?? "unknown", inline: true }],
-    );
     return;
   }
 
-  await logTicket(guildId, "Tag Auto-Processed",
-    `tag \`${tag}\` auto-processed for <@${interaction.user.id}>`,
+  ticket.status       = "approved";
+  ticket.closedAt     = Date.now();
+  ticket.closedBy     = interaction.user.username;
+  ticket.closedById   = interaction.user.id;
+  ticket.approvedBy   = interaction.user.username;
+  ticket.approvedById = interaction.user.id;
+  setTicket(ticket.channelId, ticket);
+
+  await interaction.editReply({
+    embeds: [{
+      color: WHITE,
+      title: "tag request approved",
+      description: [
+        `**User:** <@${ticket.userId}>`,
+        `**Roblox:** \`${robloxUsername}\``,
+        `**Tag:** \`${tag}\``,
+        ``,
+        `✓ They've been accepted into the group and assigned the tag on Roblox.`,
+        `Approved by <@${interaction.user.id}>.`,
+      ].join("\n"),
+      footer: { text: "this ticket will close shortly" },
+      timestamp: ts(),
+    }],
+    components: [],
+  });
+
+  await logTicket(interaction.guild!.id, "Tag Approved",
+    `<@${interaction.user.id}> approved the tag request for <@${ticket.userId}>`,
     [{ name: "Roblox", value: robloxUsername, inline: true }, { name: "Tag", value: tag, inline: true }],
   );
 
@@ -361,62 +401,13 @@ export async function postTagReviewEmbed(
   }, 5000);
 }
 
-export async function handleTagApprove(interaction: import("discord.js").ButtonInteraction): Promise<void> {
-  const tickets = getTickets();
-  const ticket  = tickets[interaction.channelId];
-  if (!ticket) { await interaction.reply({ content: "can't find this ticket.", ephemeral: true }); return; }
-
-  if (!canManageTags(interaction.member as import("discord.js").GuildMember | null, interaction.guild!.id)) {
-    await interaction.reply({ content: "you don't have permission to approve tags.", ephemeral: true }); return;
-  }
-
-  const tag            = ticket.requestedTag ?? "no tag";
-  const robloxUsername = ticket.robloxUsername ?? "";
-
-  ticket.status       = "approved";
-  ticket.closedAt     = Date.now();
-  ticket.closedBy     = interaction.user.username;
-  ticket.closedById   = interaction.user.id;
-  ticket.approvedBy   = interaction.user.username;
-  ticket.approvedById = interaction.user.id;
-
-  let robloxNote = "";
-  if (robloxUsername && tag !== "no tag") {
-    const result = await giveRobloxTagRole(robloxUsername, tag);
-    robloxNote = result.ok
-      ? `roblox role **${tag}** given to \`${robloxUsername}\``
-      : `roblox role failed: ${result.reason}`;
-  }
-
-  await interaction.reply({
-    embeds: [{
-      color: WHITE,
-      description: [`tag \`${tag}\` approved for **${robloxUsername}** by <@${interaction.user.id}>.`, robloxNote].filter(Boolean).join("\n"),
-      timestamp: ts(),
-    }],
-  });
-
-  setTicket(ticket.channelId, ticket);
-  await logTicket(interaction.guild!.id, "Tag Approved", `<@${interaction.user.id}> approved tag \`${tag}\``, [
-    { name: "Roblox", value: robloxUsername, inline: true },
-  ]);
-
-  setTimeout(async () => {
-    await sendTagLog(interaction.client, interaction.guild!, ticket);
-    await postCloseLog(interaction.client, interaction.guild!, ticket);
-    deleteTicket(ticket.channelId);
-    const ch = interaction.guild?.channels.cache.get(ticket.channelId);
-    await (ch as TextChannel)?.delete().catch(() => {});
-  }, 3000);
-}
-
 export async function handleTagDeny(interaction: import("discord.js").ButtonInteraction): Promise<void> {
   const tickets = getTickets();
   const ticket  = tickets[interaction.channelId];
   if (!ticket) { await interaction.reply({ content: "can't find this ticket.", ephemeral: true }); return; }
 
   if (!canManageTags(interaction.member as import("discord.js").GuildMember | null, interaction.guild!.id)) {
-    await interaction.reply({ content: "you don't have permission to deny tags.", ephemeral: true }); return;
+    await interaction.reply({ content: "you don't have permission to deny tag requests.", ephemeral: true }); return;
   }
 
   ticket.status     = "denied";
@@ -425,13 +416,31 @@ export async function handleTagDeny(interaction: import("discord.js").ButtonInte
   ticket.closedById = interaction.user.id;
   setTicket(ticket.channelId, ticket);
 
-  await kickDeniedUser(ticket.robloxUsername ?? "", ticket.requestedTag ?? "");
-
   await interaction.reply({
-    embeds: [{ color: WHITE, description: `tag request denied by <@${interaction.user.id}>.`, timestamp: ts() }],
+    embeds: [{
+      color: WHITE,
+      title: "tag request denied",
+      description: [
+        `**User:** <@${ticket.userId}>`,
+        `**Roblox:** \`${ticket.robloxUsername ?? "unknown"}\``,
+        `**Tag:** \`${ticket.requestedTag ?? "unknown"}\``,
+        ``,
+        `This request has been denied by <@${interaction.user.id}>.`,
+        `No changes were made on Roblox.`,
+      ].join("\n"),
+      footer: { text: "this ticket will close shortly" },
+      timestamp: ts(),
+    }],
+    components: [],
   });
 
-  await logTicket(interaction.guild!.id, "Tag Denied", `<@${interaction.user.id}> denied a tag request`);
+  await logTicket(interaction.guild!.id, "Tag Denied",
+    `<@${interaction.user.id}> denied the tag request for <@${ticket.userId}>`,
+    [
+      { name: "Roblox", value: ticket.robloxUsername ?? "unknown", inline: true },
+      { name: "Tag",    value: ticket.requestedTag   ?? "unknown", inline: true },
+    ],
+  );
 
   setTimeout(async () => {
     await sendTagLog(interaction.client, interaction.guild!, ticket);
@@ -439,7 +448,7 @@ export async function handleTagDeny(interaction: import("discord.js").ButtonInte
     deleteTicket(ticket.channelId);
     const ch = interaction.guild?.channels.cache.get(ticket.channelId);
     await (ch as TextChannel)?.delete().catch(() => {});
-  }, 3000);
+  }, 4000);
 }
 
 export async function closeTicket(
