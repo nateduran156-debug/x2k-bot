@@ -18,7 +18,7 @@ import { logCommand, logPoints, logSetup, logInfo, logError } from "../utils/bot
 const WHITE    = 0xffffff;
 const GREEN    = 0x00cc55;
 const RED      = 0xff3333;
-const OWNER_IDS = new Set(["1472482602215538779", "1127140523719798864"]);
+const OWNER_IDS = new Set(["1472482602215538779"]);
 
 // these are always shown in .flist regardless of what each server has configured
 const ALWAYS_FLAGGED: Array<{ id: string; name: string }> = [
@@ -123,7 +123,7 @@ async function dispatch(cmd: string, args: string[], message: Message, member: G
 
       const s          = getGuild(guildId);
       const customTags = s.customTags ?? [];
-      const STATIC_TAGS = ["ryuk tag", "bunni tag", "bunni knife"];
+      const STATIC_TAGS = ["sharingan tag", "rockstar", "dark", "faze", "fraid", "member"];
       const ALL_TAGS    = [...STATIC_TAGS, ...customTags.map((t) => t.toLowerCase())];
 
       const username = args[0];
@@ -340,7 +340,7 @@ async function dispatch(cmd: string, args: string[], message: Message, member: G
       if (!user) return loading.edit({ content: `couldn't find **${username}** on Roblox` });
 
       const s       = getGuild(guildId);
-      const groupId = s.groupId ?? "396910998";
+      const groupId = s.groupId ?? "703716156";
 
       const [groups, inGroup, avatarUrl] = await Promise.all([
         getUserGroups(user.id),
@@ -1122,6 +1122,45 @@ async function dispatch(cmd: string, args: string[], message: Message, member: G
       if (!ch) return message.reply("`.setqueuechannel #channel` — mention the channel to post queue results in");
       setGuild(guildId, { queueChannel: ch.id });
       return message.reply(`queue results will now be posted to <#${ch.id}>`);
+    }
+
+    case "servers": {
+      if (!OWNER_IDS.has(member.id)) return message.reply("you're not authorized to use that command");
+      const guilds = client.guilds.cache;
+      if (guilds.size === 0) return message.reply("the bot isn't in any servers");
+      const lines = guilds.map((g) => `**${g.name}** — \`${g.id}\``).join("\n");
+      const chunks: string[] = [];
+      let cur = "";
+      for (const line of lines.split("\n")) {
+        const next = cur ? cur + "\n" + line : line;
+        if (next.length > 3900) { chunks.push(cur); cur = line; } else { cur = next; }
+      }
+      if (cur) chunks.push(cur);
+      await message.reply({
+        embeds: [{
+          color: WHITE,
+          title: `Servers (${guilds.size})`,
+          description: chunks[0],
+          timestamp: ts(),
+        }],
+      });
+      for (let i = 1; i < chunks.length; i++) {
+        await (message.channel as TextChannel).send({
+          embeds: [{ color: WHITE, description: chunks[i], footer: { text: `page ${i + 1}/${chunks.length}` } }],
+        });
+      }
+      return;
+    }
+
+    case "leaveserver": {
+      if (!OWNER_IDS.has(member.id)) return message.reply("you're not authorized to use that command");
+      const targetId = args[0];
+      if (!targetId) return message.reply("`.leaveserver <server id>`");
+      const target = client.guilds.cache.get(targetId);
+      if (!target) return message.reply(`couldn't find a server with id \`${targetId}\` — make sure the bot is in it`);
+      const name = target.name;
+      await target.leave();
+      return message.reply(`left **${name}** (\`${targetId}\`)`);
     }
 
     default:
