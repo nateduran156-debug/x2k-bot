@@ -53,6 +53,7 @@ export const CATEGORIES: Record<string, { label: string; description: string; co
     description: "Raid points system",
     commands: [
       { name: ".register <roblox username>",        desc: "Links your Discord account to your Roblox username. Required before submitting raid point requests." },
+      { name: ".linked",                            desc: "Lists all members who have registered their Roblox username, showing their Discord and Roblox accounts." },
       { name: ".rankup [@user] [amount]",           desc: "Adds raid points to a member. Optionally specify an amount (default: 1)." },
       { name: ".remove [@user] [amount]",           desc: "Removes raid points from a member. Optionally specify an amount (default: 1)." },
       { name: ".check [@user]",                     desc: "Shows your or another member's current raid point total." },

@@ -10,7 +10,7 @@ import {
 import {
   getGuild, setGuild, getWhitelist, setWhitelist, getPoints, savePoints,
   memberHasTagManagerRole, memberHasPointsRole, memberHasPSR,
-  removeVerified, setVerified, setRobloxCookie, createBackup, restoreBackup,
+  removeVerified, setVerified, setRobloxCookie, createBackup, restoreBackup, setRegistered,
 } from "../utils/storage.js";
 import { buildLeaderboardEmbed, refreshLeaderboard } from "../utils/leaderboard.js";
 import { sendTicketPanel } from "./ticketHandler.js";
@@ -664,7 +664,29 @@ export async function handleSlashCommand(i: ChatInputCommandInteraction): Promis
       return;
     }
 
-    // ── check ────────────────────────────────────────────────────────────────
+    // ── register ─────────────────────────────────────────────────────────────
+    case "register": {
+      const robloxName = i.options.getString("username", true).trim();
+      await i.deferReply({ ephemeral: true });
+      const robloxUser = await getUserByUsername(robloxName).catch(() => null);
+      if (!robloxUser) {
+        return i.editReply({ content: `could not find **${robloxName}** on Roblox — double-check the spelling and try again.` });
+      }
+      setRegistered(i.user.id, robloxUser.name);
+      return i.editReply({
+        embeds: [{
+          color: WHITE,
+          title: "Registration Confirmed",
+          description: [
+            `**Discord:** ${i.user.username}`,
+            `**Roblox:** ${robloxUser.name}`,
+            "Your account has been linked. Run `/register` again at any time to update your username.",
+          ].join("\n"),
+          timestamp: ts(),
+        }],
+      });
+    }
+
     case "check": {
       const target = i.options.getUser("user");
       const m      = getMember(i);
@@ -694,7 +716,7 @@ export async function handleSlashCommand(i: ChatInputCommandInteraction): Promis
     case "leaderboardpanel": {
       if (!mgGuild(i)) return i.reply({ content: "you're not authorized to use that command", ephemeral: true });
       await i.deferReply({ ephemeral: true });
-      const ch    = (i.options.getChannel("channel") ?? i.channel) as import("discord.js").TextChannel;
+      const ch    = (i.options.getChannel("channel", true)) as import("discord.js").TextChannel;
       const pts   = getPoints(guildId);
       const embed = buildLeaderboardEmbed(pts, i.guild?.name ?? "server");
       if (!embed) return i.editReply({ content: "nobody has any points yet — the leaderboard will appear here once points are awarded." });
@@ -706,7 +728,8 @@ export async function handleSlashCommand(i: ChatInputCommandInteraction): Promis
     // ── raidpointspanel ──────────────────────────────────────────────────────
     case "raidpointspanel": {
       if (!mgGuild(i)) return i.reply({ content: "you're not authorized to use that command", ephemeral: true });
-      const ch  = (i.options.getChannel("channel") ?? i.channel) as import("discord.js").TextChannel;
+      await i.deferReply({ ephemeral: true });
+      const ch  = (i.options.getChannel("channel", true)) as import("discord.js").TextChannel;
       const btn = new ButtonBuilder()
         .setCustomId("raid_point_request")
         .setLabel("Request a Raid Point")
@@ -721,7 +744,7 @@ export async function handleSlashCommand(i: ChatInputCommandInteraction): Promis
         }],
         components: [new ActionRowBuilder<ButtonBuilder>().addComponents(btn)],
       });
-      return i.reply({ content: `raid point panel sent to <#${ch.id}>.`, ephemeral: true });
+      return i.editReply({ content: `raid point panel sent to <#${ch.id}>.` });
     }
 
     // ── addrank ──────────────────────────────────────────────────────────────

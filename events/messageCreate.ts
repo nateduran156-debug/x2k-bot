@@ -6,7 +6,7 @@ import {
   getGuild, setGuild, getWhitelist, setWhitelist, getPoints, savePoints,
   memberHasCommandRole, memberHasPointsRole, memberHasTagManagerRole, memberHasPSR,
   memberHasVerificationManagerRole,
-  removeVerified, setVerified, createBackup, restoreBackup, readJSON, writeJSON, setRegistered,
+  removeVerified, setVerified, createBackup, restoreBackup, readJSON, writeJSON, setRegistered, getRegistered,
 } from "../utils/storage.js";
 import { getUserByUsername, getUserGroups, isInGroup, getGroupInfo, getGroupInfoBatch, getGroupRank, giveRobloxTagRole, getUserAvatarUrl, getPendingJoinRequests, acceptJoinRequest } from "../utils/roblox.js";
 import { buildLeaderboardEmbed, refreshLeaderboard } from "../utils/leaderboard.js";
@@ -626,6 +626,31 @@ async function dispatch(cmd: string, args: string[], message: Message, member: G
           timestamp: ts(),
         }],
       });
+    }
+
+    case "linked": {
+      const registered = getRegistered();
+      const entries    = Object.entries(registered);
+      if (entries.length === 0) {
+        return message.reply({ embeds: [{ color: WHITE, description: "no users have registered yet.", timestamp: ts() }] });
+      }
+      const lines = entries.map(([discordId, roblox]) => `<@${discordId}> — **${roblox}**`);
+      const pages: string[] = [];
+      for (let i = 0; i < lines.length; i += 20) {
+        pages.push(lines.slice(i, i + 20).join("\n"));
+      }
+      for (const page of pages) {
+        await message.channel.send({
+          embeds: [{
+            color: WHITE,
+            title: pages.indexOf(page) === 0 ? `Registered Users (${entries.length})` : undefined,
+            description: page,
+            footer: { text: message.guild?.name ?? "bot" },
+            timestamp: ts(),
+          }],
+        });
+      }
+      return;
     }
 
     case "rankup": {

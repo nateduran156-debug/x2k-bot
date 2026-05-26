@@ -244,6 +244,14 @@ const commands = [
     .setIntegrationTypes(ALL_TYPES).setContexts(ALL_CONTEXTS),
 
   new SlashCommandBuilder()
+    .setName("register")
+    .setDescription("link your Discord account to your Roblox username")
+    .setIntegrationTypes(ALL_TYPES).setContexts(ALL_CONTEXTS)
+    .addStringOption((o) =>
+      o.setName("username").setDescription("your roblox username").setRequired(true),
+    ),
+
+  new SlashCommandBuilder()
     .setName("leaderboardpanel")
     .setDescription("send a live leaderboard panel to a channel — auto-refreshes every 10 minutes")
     .setIntegrationTypes(ALL_TYPES).setContexts(ALL_CONTEXTS)
