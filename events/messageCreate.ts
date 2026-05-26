@@ -859,7 +859,7 @@ async function dispatch(cmd: string, args: string[], message: Message, member: G
       try { raw = await fetch(attachment.url).then((r) => r.text()); } catch { await loading.edit({ content: "couldn't download the file" }); return; }
       let backup: { files: Record<string, unknown> };
       try { backup = JSON.parse(raw); } catch { await loading.edit({ content: "that file is unreadable" }); return; }
-      if (!backup.files || typeof backup.files !== "object") { await loading.edit({ content: "that doesn't look like a valid /x2k backup" }); return; }
+      if (!backup.files || typeof backup.files !== "object") { await loading.edit({ content: "that doesn't look like a valid /curek backup" }); return; }
       const restored = restoreBackup(backup);
       await logInfo(guildId, "Backup Restored", `<@${message.author.id}> restored a backup (${restored} files)`);
       await loading.edit({ embeds: [{ color: WHITE, description: `restored **${restored}** files`, footer: { text: message.guild!.name }, timestamp: ts() }] });
