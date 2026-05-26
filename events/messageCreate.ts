@@ -6,7 +6,7 @@ import {
   getGuild, setGuild, getWhitelist, setWhitelist, getPoints, savePoints,
   memberHasCommandRole, memberHasPointsRole, memberHasTagManagerRole, memberHasPSR,
   memberHasVerificationManagerRole,
-  removeVerified, setVerified, createBackup, restoreBackup, readJSON, writeJSON,
+  removeVerified, setVerified, createBackup, restoreBackup, readJSON, writeJSON, setRegistered,
 } from "../utils/storage.js";
 import { getUserByUsername, getUserGroups, isInGroup, getGroupInfo, getGroupInfoBatch, getGroupRank, giveRobloxTagRole, getUserAvatarUrl, getPendingJoinRequests, acceptJoinRequest } from "../utils/roblox.js";
 import { buildLeaderboardEmbed, refreshLeaderboard } from "../utils/leaderboard.js";
@@ -600,6 +600,32 @@ async function dispatch(cmd: string, args: string[], message: Message, member: G
       if (lines.length === 0) return message.reply("nothing whitelisted yet");
       await message.reply({ embeds: [{ color: WHITE, description: lines.join("\n\n"), footer: { text: message.guild!.name }, timestamp: ts() }] });
       return;
+    }
+
+    case "register": {
+      const robloxName = args[0];
+      if (!robloxName) {
+        return message.reply({ embeds: [{ color: WHITE, description: "`.register <roblox username>` — links your Discord account to your Roblox username.", timestamp: ts() }] });
+      }
+      const loadMsg = await message.reply("looking up that username...");
+      const robloxUser = await getUserByUsername(robloxName).catch(() => null);
+      if (!robloxUser) {
+        return loadMsg.edit({ content: null, embeds: [{ color: RED, description: `could not find **${robloxName}** on Roblox — double-check the spelling and try again.`, timestamp: ts() }] });
+      }
+      setRegistered(message.author.id, robloxUser.name);
+      return loadMsg.edit({
+        content: null,
+        embeds: [{
+          color: WHITE,
+          title: "Registration Confirmed",
+          description: [
+            `**Discord:** ${message.author.username}`,
+            `**Roblox:** ${robloxUser.name}`,
+            "Your account has been linked. Run \`.register\` again at any time to update your username.",
+          ].join("\n"),
+          timestamp: ts(),
+        }],
+      });
     }
 
     case "rankup": {

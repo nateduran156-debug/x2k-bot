@@ -2,6 +2,7 @@ import { REST, Routes, SlashCommandBuilder, InteractionContextType, ApplicationI
 import type { Client } from "discord.js";
 import { logInfo } from "../utils/botLogger.js";
 import { readJSON } from "../utils/storage.js";
+import { refreshLeaderboard } from "../utils/leaderboard.js";
 
 
 const ALL_TYPES    = [ApplicationIntegrationType.GuildInstall, ApplicationIntegrationType.UserInstall];
@@ -242,6 +243,24 @@ const commands = [
     .setDescription("show the top 15 raid point holders in the server")
     .setIntegrationTypes(ALL_TYPES).setContexts(ALL_CONTEXTS),
 
+  new SlashCommandBuilder()
+    .setName("leaderboardpanel")
+    .setDescription("send a live leaderboard panel to a channel — auto-refreshes every 10 minutes")
+    .setIntegrationTypes(ALL_TYPES).setContexts(ALL_CONTEXTS)
+    .addChannelOption((o) =>
+      o.setName("channel").setDescription("channel to send the leaderboard to").setRequired(true)
+        .addChannelTypes(ChannelType.GuildText),
+    ),
+
+  new SlashCommandBuilder()
+    .setName("raidpointspanel")
+    .setDescription("send the raid point request panel to a channel")
+    .setIntegrationTypes(ALL_TYPES).setContexts(ALL_CONTEXTS)
+    .addChannelOption((o) =>
+      o.setName("channel").setDescription("channel to send the panel to").setRequired(true)
+        .addChannelTypes(ChannelType.GuildText),
+    ),
+
   // ── ranks ─────────────────────────────────────────────────────────────────
   new SlashCommandBuilder()
     .setName("addrank")
@@ -344,7 +363,7 @@ export function registerReady(client: Client) {
       console.error("slash command registration failed:", err);
     }
 
-    const guilds = readJSON<Record<string, { botLogChannel?: string }>>("guilds.json");
+    const guilds = readJSON<Record<string, { botLogChannel?: string; leaderboardMessage?: { channelId: string; messageId: string } }>>("guilds.json");
     const startTime = new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
     for (const [guildId, s] of Object.entries(guilds)) {
       if (!s.botLogChannel) continue;
@@ -354,5 +373,14 @@ export function registerReady(client: Client) {
         { name: "Started At", value: startTime,                    inline: true },
       ]);
     }
+
+    setInterval(async () => {
+      const allGuilds = readJSON<Record<string, { leaderboardMessage?: { channelId: string; messageId: string } }>>("guilds.json");
+      for (const [gid, gs] of Object.entries(allGuilds)) {
+        if (gs.leaderboardMessage) {
+          await refreshLeaderboard(c, gid).catch(() => {});
+        }
+      }
+    }, 10 * 60 * 1000);
   });
 }

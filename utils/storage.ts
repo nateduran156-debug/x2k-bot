@@ -41,9 +41,10 @@ export interface TicketData {
   channelId: string;
   userId: string;
   guildId: string;
-  type: "verification" | "tag";
+  type: "verification" | "tag" | "raidpoint";
   robloxUsername?: string;
   requestedTag?: string;
+  proofUrl?: string;
   messageId?: string;
   messages: Array<{ author: string; authorId: string; content: string; timestamp: number }>;
   openedAt: number;
@@ -186,7 +187,23 @@ export function memberHasPSR(
   return member.roles.cache.has(s.pointsSupportRole);
 }
 
-const BACKUP_FILES = ["guilds.json", "points.json", "tickets.json", "whitelist.json", "verified.json", "roblox.json"];
+export function getRegistered(): Record<string, string> {
+  return readJSON("registered.json");
+}
+
+export function setRegistered(userId: string, robloxUsername: string): void {
+  const r = getRegistered();
+  r[userId] = robloxUsername;
+  writeJSON("registered.json", r);
+}
+
+export function removeRegistered(userId: string): void {
+  const r = getRegistered();
+  delete r[userId];
+  writeJSON("registered.json", r);
+}
+
+const BACKUP_FILES = ["guilds.json", "points.json", "tickets.json", "whitelist.json", "verified.json", "roblox.json", "registered.json"];
 
 export function createBackup(): { createdAt: string; files: Record<string, unknown> } {
   const backup: Record<string, unknown> = {};

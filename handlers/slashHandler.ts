@@ -690,6 +690,40 @@ export async function handleSlashCommand(i: ChatInputCommandInteraction): Promis
       return;
     }
 
+    // ── leaderboardpanel ─────────────────────────────────────────────────────
+    case "leaderboardpanel": {
+      if (!mgGuild(i)) return i.reply({ content: "you're not authorized to use that command", ephemeral: true });
+      await i.deferReply({ ephemeral: true });
+      const ch    = (i.options.getChannel("channel") ?? i.channel) as import("discord.js").TextChannel;
+      const pts   = getPoints(guildId);
+      const embed = buildLeaderboardEmbed(pts, i.guild?.name ?? "server");
+      if (!embed) return i.editReply({ content: "nobody has any points yet — the leaderboard will appear here once points are awarded." });
+      const msg = await ch.send({ embeds: [embed] });
+      setGuild(guildId, { leaderboardMessage: { channelId: ch.id, messageId: msg.id } });
+      return i.editReply({ content: `leaderboard panel sent to <#${ch.id}> — it will automatically refresh every 10 minutes.` });
+    }
+
+    // ── raidpointspanel ──────────────────────────────────────────────────────
+    case "raidpointspanel": {
+      if (!mgGuild(i)) return i.reply({ content: "you're not authorized to use that command", ephemeral: true });
+      const ch  = (i.options.getChannel("channel") ?? i.channel) as import("discord.js").TextChannel;
+      const btn = new ButtonBuilder()
+        .setCustomId("raid_point_request")
+        .setLabel("Request a Raid Point")
+        .setStyle(ButtonStyle.Primary);
+      await ch.send({
+        embeds: [{
+          color: 0xffffff,
+          title: "Raid Points",
+          description: "Click the button below to submit a raid point request. You will be prompted to provide your Roblox username and a screenshot confirming your participation in the raid. All submissions are reviewed by staff before points are awarded.",
+          footer: { text: "submissions that cannot be verified will be denied" },
+          timestamp: new Date().toISOString(),
+        }],
+        components: [new ActionRowBuilder<ButtonBuilder>().addComponents(btn)],
+      });
+      return i.reply({ content: `raid point panel sent to <#${ch.id}>.`, ephemeral: true });
+    }
+
     // ── addrank ──────────────────────────────────────────────────────────────
     case "addrank": {
       if (!mgGuild(i)) return i.reply({ content: "you're not authorized to use that command", ephemeral: true });

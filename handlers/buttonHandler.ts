@@ -5,6 +5,7 @@ import {
   showVerificationModal, openVerificationTicket,
   openTagChannel, handleInChannelTagSelect, postTagReviewEmbed,
   handleTagApprove, handleTagDeny, closeTicket,
+  showRaidPointModal, openRaidPointTicket, handleRaidApprove, handleRaidDeny,
 } from "./ticketHandler.js";
 import { buildHelpMessage } from "../utils/help.js";
 
@@ -20,6 +21,15 @@ export async function handleButton(interaction: Interaction) {
       if (!robloxUsername) return i.reply({ content: "please enter a roblox username.", ephemeral: true });
       await i.deferReply({ ephemeral: true });
       return openVerificationTicket(i, i.guild!, robloxUsername);
+    }
+
+    if (customId === "raid_point_modal") {
+      const robloxUsername = i.fields.getTextInputValue("roblox_username").trim();
+      const proofUrl       = i.fields.getTextInputValue("proof_url").trim();
+      if (!robloxUsername) return i.reply({ content: "please enter your roblox username.", ephemeral: true });
+      if (!proofUrl)       return i.reply({ content: "please provide a screenshot url.", ephemeral: true });
+      await i.deferReply({ ephemeral: true });
+      return openRaidPointTicket(i, i.guild!, robloxUsername, proofUrl);
     }
 
     if (customId.startsWith("tag_ticket_modal::")) {
@@ -59,6 +69,9 @@ export async function handleButton(interaction: Interaction) {
     if (customId === "open_ticket_tag")          return openTagChannel(i);
     if (customId === "ticket_tag_approve")       return handleTagApprove(i);
     if (customId === "ticket_tag_deny")          return handleTagDeny(i);
+    if (customId === "raid_point_request")       return showRaidPointModal(i);
+    if (customId === "raid_approve")             return handleRaidApprove(i);
+    if (customId === "raid_deny")                return handleRaidDeny(i);
 
     if (customId === "resetall_confirm" || customId === "resetall_cancel") return;
 

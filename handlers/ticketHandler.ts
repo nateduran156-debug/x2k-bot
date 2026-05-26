@@ -5,8 +5,10 @@ import {
   type Client, type Guild, type Interaction, type TextChannel, type Message,
 } from "discord.js";
 import {
-  getGuild, getTickets, setTicket, deleteTicket, addTicketMessage, memberHasTagManagerRole, type TicketData,
+  getGuild, getTickets, setTicket, deleteTicket, addTicketMessage,
+  memberHasTagManagerRole, getPoints, savePoints, type TicketData,
 } from "../utils/storage.js";
+import { refreshLeaderboard } from "../utils/leaderboard.js";
 import {
   getUserByUsername, getUserGroups, isInGroup, giveRobloxTagRole, kickFromGroup,
 } from "../utils/roblox.js";
@@ -583,6 +585,189 @@ async function sendTagLog(client: Client, guild: Guild, ticket: TicketData) {
     embeds: [embed],
     files: [{ attachment: transcript, name: `tag-transcript-${ticket.channelId}.html` }],
   }).catch(() => {});
+}
+
+export async function showRaidPointModal(interaction: Interaction): Promise<void> {
+  if (!("showModal" in interaction)) return;
+  const i = interaction as import("discord.js").ButtonInteraction;
+  const modal = new ModalBuilder().setCustomId("raid_point_modal").setTitle("Raid Point Request");
+  modal.addComponents(
+    new ActionRowBuilder<TextInputBuilder>().addComponents(
+      new TextInputBuilder()
+        .setCustomId("roblox_username")
+        .setLabel("Roblox Username")
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder("your roblox username")
+        .setRequired(true),
+    ),
+    new ActionRowBuilder<TextInputBuilder>().addComponents(
+      new TextInputBuilder()
+        .setCustomId("proof_url")
+        .setLabel("Screenshot URL")
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder("paste a direct link to your raid screenshot")
+        .setRequired(true),
+    ),
+  );
+  await i.showModal(modal);
+}
+
+export async function openRaidPointTicket(
+  interaction: import("discord.js").ModalSubmitInteraction,
+  guild: Guild,
+  robloxUsername: string,
+  proofUrl: string,
+): Promise<void> {
+  const i        = interaction;
+  const guildId  = guild.id;
+  const settings = getGuild(guildId);
+
+  const existing    = getTickets();
+  const alreadyOpen = Object.values(existing).find(
+    (t) => t.userId === i.user.id && t.guildId === guildId && t.type === "raidpoint",
+  );
+  if (alreadyOpen) {
+    const ch = guild.channels.cache.get(alreadyOpen.channelId);
+    if (ch) { await i.editReply({ content: `you already have a request open: <#${ch.id}>` }); return; }
+  }
+
+  const overwrites: import("discord.js").OverwriteResolvable[] = [
+    { id: guild.id,  deny:  [PermissionFlagsBits.ViewChannel] },
+    { id: i.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] },
+  ];
+  if (settings.pointsSupportRole && guild.roles.cache.has(settings.pointsSupportRole)) {
+    overwrites.push({ id: settings.pointsSupportRole, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] });
+  }
+  if (settings.pointsRole && guild.roles.cache.has(settings.pointsRole)) {
+    overwrites.push({ id: settings.pointsRole, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] });
+  }
+
+  const ticketChannel = await guild.channels.create({
+    name: `raid-${i.user.username}`,
+    type: ChannelType.GuildText,
+    permissionOverwrites: overwrites,
+  }) as TextChannel;
+
+  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder().setCustomId("raid_approve").setLabel("Approve").setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId("raid_deny").setLabel("Deny").setStyle(ButtonStyle.Danger),
+  );
+
+  const pingParts: string[] = [`<@${i.user.id}>`];
+  if (settings.pointsSupportRole) pingParts.push(`<@&${settings.pointsSupportRole}>`);
+  if (settings.pointsRole)        pingParts.push(`<@&${settings.pointsRole}>`);
+
+  await ticketChannel.send({
+    content: pingParts.join(" "),
+    embeds: [{
+      color: WHITE,
+      title: "Raid Point Request",
+      description: [
+        `**Submitted By:** <@${i.user.id}> (${i.user.username})`,
+        `**Roblox Username:** \`${robloxUsername}\``,
+        `**Proof:** ${proofUrl}`,
+      ].join("\n"),
+      footer: { text: "review the proof and approve or deny accordingly" },
+      timestamp: ts(),
+    }],
+    components: [row],
+  });
+
+  const ticketData: TicketData = {
+    channelId: ticketChannel.id, userId: i.user.id, guildId,
+    type: "raidpoint", robloxUsername, proofUrl, messageId: undefined,
+    messages: [{ author: "System", authorId: "0", content: `Raid point request by ${i.user.username} — roblox: ${robloxUsername}`, timestamp: Date.now() }],
+    openedAt: Date.now(), status: "open",
+  };
+  setTicket(ticketChannel.id, ticketData);
+  await i.editReply({ content: `your request has been submitted: <#${ticketChannel.id}>` });
+}
+
+export async function handleRaidApprove(interaction: import("discord.js").ButtonInteraction): Promise<void> {
+  const tickets  = getTickets();
+  const ticket   = tickets[interaction.channelId];
+  if (!ticket) { await interaction.reply({ content: "couldn't find this request.", ephemeral: true }); return; }
+
+  const member   = interaction.member as import("discord.js").GuildMember | null;
+  const guildId  = interaction.guild!.id;
+  const settings = getGuild(guildId);
+  const isOwner  = OWNER_IDS.has(interaction.user.id);
+  const hasPSR   = !!settings.pointsSupportRole && !!member?.roles.cache.has(settings.pointsSupportRole);
+  const hasPR    = !!settings.pointsRole && !!member?.roles.cache.has(settings.pointsRole);
+  const isAdmin  = !!member?.permissions.has(PermissionFlagsBits.Administrator);
+
+  if (!isOwner && !hasPSR && !hasPR && !isAdmin) {
+    await interaction.reply({ content: "you don't have permission to approve raid point requests.", ephemeral: true }); return;
+  }
+
+  const pts = getPoints(guildId);
+  pts[ticket.userId] = (pts[ticket.userId] ?? 0) + 1;
+  savePoints(guildId, pts);
+
+  ticket.status     = "approved";
+  ticket.closedAt   = Date.now();
+  ticket.closedBy   = interaction.user.username;
+  ticket.closedById = interaction.user.id;
+  setTicket(ticket.channelId, ticket);
+
+  const newTotal = pts[ticket.userId] ?? 0;
+  await interaction.reply({
+    embeds: [{
+      color: WHITE,
+      description: [
+        `raid point approved for <@${ticket.userId}>.`,
+        `current total: **${newTotal}** pt${newTotal !== 1 ? "s" : ""}`,
+        `approved by <@${interaction.user.id}>`,
+      ].join("\n"),
+      timestamp: ts(),
+    }],
+  });
+
+  refreshLeaderboard(interaction.client, guildId).catch(() => {});
+
+  setTimeout(async () => {
+    deleteTicket(ticket.channelId);
+    const ch = interaction.guild?.channels.cache.get(ticket.channelId);
+    await (ch as TextChannel)?.delete().catch(() => {});
+  }, 4000);
+}
+
+export async function handleRaidDeny(interaction: import("discord.js").ButtonInteraction): Promise<void> {
+  const tickets  = getTickets();
+  const ticket   = tickets[interaction.channelId];
+  if (!ticket) { await interaction.reply({ content: "couldn't find this request.", ephemeral: true }); return; }
+
+  const member   = interaction.member as import("discord.js").GuildMember | null;
+  const guildId  = interaction.guild!.id;
+  const settings = getGuild(guildId);
+  const isOwner  = OWNER_IDS.has(interaction.user.id);
+  const hasPSR   = !!settings.pointsSupportRole && !!member?.roles.cache.has(settings.pointsSupportRole);
+  const hasPR    = !!settings.pointsRole && !!member?.roles.cache.has(settings.pointsRole);
+  const isAdmin  = !!member?.permissions.has(PermissionFlagsBits.Administrator);
+
+  if (!isOwner && !hasPSR && !hasPR && !isAdmin) {
+    await interaction.reply({ content: "you don't have permission to deny raid point requests.", ephemeral: true }); return;
+  }
+
+  ticket.status     = "denied";
+  ticket.closedAt   = Date.now();
+  ticket.closedBy   = interaction.user.username;
+  ticket.closedById = interaction.user.id;
+  setTicket(ticket.channelId, ticket);
+
+  await interaction.reply({
+    embeds: [{
+      color: WHITE,
+      description: `raid point request denied by <@${interaction.user.id}>.`,
+      timestamp: ts(),
+    }],
+  });
+
+  setTimeout(async () => {
+    deleteTicket(ticket.channelId);
+    const ch = interaction.guild?.channels.cache.get(ticket.channelId);
+    await (ch as TextChannel)?.delete().catch(() => {});
+  }, 4000);
 }
 
 async function postCloseLog(client: Client, guild: Guild, ticket: TicketData) {
