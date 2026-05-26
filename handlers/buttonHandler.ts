@@ -1,6 +1,7 @@
 import { PermissionFlagsBits, type Interaction } from "discord.js";
-import { getTickets, setVerified, getGuild, memberHasVerificationManagerRole } from "../utils/storage.js";
+import { getTickets, setVerified, getGuild, memberHasVerificationManagerRole, getRegistered } from "../utils/storage.js";
 import { getUserByUsername, isInGroup } from "../utils/roblox.js";
+import { isQueueActive, addManualJoiner } from "../utils/queue.js";
 import {
   showVerificationModal, openVerificationTicket,
   openTagChannel, handleInChannelTagSelect, postTagReviewEmbed,
@@ -72,6 +73,28 @@ export async function handleButton(interaction: Interaction) {
     if (customId === "raid_point_request")       return showRaidPointModal(i);
     if (customId === "raid_approve")             return handleRaidApprove(i);
     if (customId === "raid_deny")                return handleRaidDeny(i);
+
+    if (customId === "queue_join") {
+      const guildId = i.guild?.id;
+      if (!guildId) return i.reply({ content: "couldn't find server.", ephemeral: true });
+      if (!isQueueActive(guildId)) {
+        return i.reply({ content: "the queue has already ended.", ephemeral: true });
+      }
+      const registered = getRegistered();
+      const robloxUsername = registered[i.user.id];
+      if (!robloxUsername) {
+        return i.reply({ content: "you need to link your Roblox account first — run `.register <roblox username>`", ephemeral: true });
+      }
+      const robloxUser = await getUserByUsername(robloxUsername).catch(() => null);
+      if (!robloxUser) {
+        return i.reply({ content: `couldn't find your Roblox account **${robloxUsername}** — try re-registering with \`.register <username>\``, ephemeral: true });
+      }
+      const added = addManualJoiner(guildId, robloxUser.name, robloxUser.id);
+      if (!added) {
+        return i.reply({ content: `you're already in the queue as **${robloxUser.name}**`, ephemeral: true });
+      }
+      return i.reply({ content: `you've been added to the queue as **${robloxUser.name}**`, ephemeral: true });
+    }
 
     if (customId === "resetall_confirm" || customId === "resetall_cancel") return;
 
