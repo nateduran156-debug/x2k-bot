@@ -39,7 +39,7 @@ export async function botLog(
         title,
         description,
         fields: fields ?? [],
-        footer: { text: `/x2k • ${level}` },
+        footer: { text: `/curek • ${level}` },
         timestamp: new Date().toISOString(),
       }],
     });
