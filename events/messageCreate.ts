@@ -8,7 +8,7 @@ import {
   memberHasVerificationManagerRole,
   removeVerified, setVerified, createBackup, restoreBackup, readJSON, writeJSON, setRegistered, getRegistered,
 } from "../utils/storage.js";
-import { startQueue, endQueue, isQueueActive, getQueueLog } from "../utils/queue.js";
+import { startQueue, endQueue, isQueueActive, getQueueLog, addJoiner } from "../utils/queue.js";
 import { getUserByUsername, getUserGroups, isInGroup, getGroupInfo, getGroupInfoBatch, getGroupRank, giveRobloxTagRole, getUserAvatarUrl, getPendingJoinRequests, acceptJoinRequest } from "../utils/roblox.js";
 import { buildLeaderboardEmbed, refreshLeaderboard } from "../utils/leaderboard.js";
 import { buildHelpMessage } from "../utils/help.js";
@@ -1034,29 +1034,21 @@ async function dispatch(cmd: string, args: string[], message: Message, member: G
       if (isQueueActive(guildId)) {
         return message.reply("there's already an active queue — run `.endqueue` to end it first");
       }
-      const loading = await message.reply("fetching group members...");
-      const result = await startQueue(guildId, message.author.id);
-      if (!result.ok) {
-        return loading.edit({ content: `couldn't start the queue: ${result.reason}` });
+      const started = startQueue(guildId, message.author.id);
+      if (!started) {
+        return message.reply("there's already an active queue — run `.endqueue` to end it first");
       }
-      const s = getGuild(guildId);
-      const channelNote = s.queueChannel
-        ? `results will be posted to <#${s.queueChannel}>`
-        : "no queue channel set — use `.setqueuechannel #channel` to configure one";
       const queueRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder()
           .setCustomId("queue_join")
-          .setLabel("QUEUE")
+          .setLabel("JOIN")
           .setStyle(ButtonStyle.Secondary),
       );
-      return loading.edit({
-        content: null,
+      return message.channel.send({
         embeds: [{
           color: WHITE,
-          title: "Queue Started",
-          description: `**ONLY PRESS THE BUTTON IF YOU ARE IN Q/INGAME**\n\n${channelNote}`,
-          fields: [{ name: "Snapshot", value: `${result.count} current members`, inline: true }],
-          footer: { text: `run .endqueue to stop` },
+          description: "**JOIN QUEUE IF IN QUEUE/INGAME**",
+          footer: { text: "run .endqueue to close the queue" },
           timestamp: ts(),
         }],
         components: [queueRow],
@@ -1070,33 +1062,33 @@ async function dispatch(cmd: string, args: string[], message: Message, member: G
       if (!isQueueActive(guildId)) {
         return message.reply("no queue is currently active — run `.queue` to start one");
       }
-      const loading = await message.reply("ending queue and fetching final member list...");
+      const loading = await message.reply("ending queue...");
       const result = await endQueue(client, guildId);
       if (!result.ok) {
         return loading.edit({ content: `couldn't end the queue: ${result.reason}` });
       }
-      if (result.usernames.length === 0) {
+      if (result.entries.length === 0) {
         return loading.edit({
           content: null,
           embeds: [{
             color: WHITE,
             title: "Queue Ended",
-            description: "nobody from the group joined during this session",
+            description: "nobody joined the queue during this session",
             footer: { text: message.guild!.name },
             timestamp: ts(),
           }],
         });
       }
-      const lines = result.usernames.map((u, i) => `\`${i + 1}.\` **${u}**`).join("\n");
+      const lines = result.entries.map((e, i) => `\`${i + 1}.\` **${e.name}** (<@${e.id}>)`).join("\n");
       const s = getGuild(guildId);
-      const channelNote = s.queueChannel ? `full results posted to <#${s.queueChannel}>` : "";
+      const channelNote = s.queueChannel ? `\n\nfull results posted to <#${s.queueChannel}>` : "";
       return loading.edit({
         content: null,
         embeds: [{
           color: WHITE,
-          title: `Queue Ended — ${result.usernames.length} joined`,
-          description: lines.slice(0, 3900) + (channelNote ? `\n\n${channelNote}` : ""),
-          footer: { text: "registered members received +1 raid point" },
+          title: `Queue Ended — ${result.entries.length} joined`,
+          description: lines.slice(0, 3900) + channelNote,
+          footer: { text: "each member received +1 raid point" },
           timestamp: ts(),
         }],
       });
@@ -1110,13 +1102,13 @@ async function dispatch(cmd: string, args: string[], message: Message, member: G
           embeds: [{
             color: WHITE,
             title: "Queue Log — 0 joined so far",
-            description: "nobody has joined the group since the queue started",
+            description: "nobody has clicked JOIN yet",
             footer: { text: "queue is still active" },
             timestamp: ts(),
           }],
         });
       }
-      const lines = log.usernames.map((u, i) => `\`${i + 1}.\` **${u}**`).join("\n");
+      const lines = log.entries.map((e, i) => `\`${i + 1}.\` **${e.name}** (<@${e.id}>)`).join("\n");
       return message.reply({
         embeds: [{
           color: WHITE,
