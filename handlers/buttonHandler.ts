@@ -1,7 +1,7 @@
 import { PermissionFlagsBits, type Interaction } from "discord.js";
 import { getTickets, setVerified, getGuild, memberHasVerificationManagerRole, getRegistered } from "../utils/storage.js";
 import { getUserByUsername, isInGroup } from "../utils/roblox.js";
-import { isQueueActive, addManualJoiner } from "../utils/queue.js";
+import { isQueueActive, addJoiner } from "../utils/queue.js";
 import {
   showVerificationModal, openVerificationTicket,
   openTagChannel, handleInChannelTagSelect, postTagReviewEmbed,
@@ -82,18 +82,12 @@ export async function handleButton(interaction: Interaction) {
       }
       const registered = getRegistered();
       const robloxUsername = registered[i.user.id];
-      if (!robloxUsername) {
-        return i.reply({ content: "you need to link your Roblox account first — run `.register <roblox username>`", ephemeral: true });
+      const displayName = robloxUsername ?? i.user.username;
+      const result = addJoiner(guildId, i.user.id, displayName);
+      if (result === "already_in") {
+        return i.reply({ content: `you're already in the queue as **${displayName}**`, ephemeral: true });
       }
-      const robloxUser = await getUserByUsername(robloxUsername).catch(() => null);
-      if (!robloxUser) {
-        return i.reply({ content: `couldn't find your Roblox account **${robloxUsername}** — try re-registering with \`.register <username>\``, ephemeral: true });
-      }
-      const added = addManualJoiner(guildId, robloxUser.name, robloxUser.id);
-      if (!added) {
-        return i.reply({ content: `you're already in the queue as **${robloxUser.name}**`, ephemeral: true });
-      }
-      return i.reply({ content: `you've been added to the queue as **${robloxUser.name}**`, ephemeral: true });
+      return i.reply({ content: `you've been added to the queue as **${displayName}**`, ephemeral: true });
     }
 
     if (customId === "resetall_confirm" || customId === "resetall_cancel") return;
