@@ -8,7 +8,7 @@ import {
   memberHasVerificationManagerRole,
   removeVerified, setVerified, createBackup, restoreBackup, readJSON, writeJSON, setRegistered, getRegistered,
 } from "../utils/storage.js";
-import { startQueue, endQueue, isQueueActive, getQueueLog, addJoiner } from "../utils/queue.js";
+import { startQueue, endQueue, isQueueActive, getQueueLog, addJoiner, setQueuePoints, getQueuePoints } from "../utils/queue.js";
 import { getUserByUsername, getUserGroups, isInGroup, getGroupInfo, getGroupInfoBatch, getGroupRank, giveRobloxTagRole, getUserAvatarUrl, getPendingJoinRequests, acceptJoinRequest } from "../utils/roblox.js";
 import { buildLeaderboardEmbed, refreshLeaderboard } from "../utils/leaderboard.js";
 import { buildHelpMessage } from "../utils/help.js";
@@ -93,30 +93,7 @@ export function registerMessageCreate(client: Client) {
   });
 }
 
-async function syncRankRoles(
-  guild: Guild,
-  userId: string,
-  currentPoints: number,
-  ranks: Array<{ roleId: string; points: number; name: string }>,
-): Promise<{ gained: string[]; lost: string[] }> {
-  if (ranks.length === 0) return { gained: [], lost: [] };
-  const gMember = await guild.members.fetch(userId).catch(() => null);
-  if (!gMember) return { gained: [], lost: [] };
-  const gained: string[] = [];
-  const lost:   string[] = [];
-  for (const rank of ranks) {
-    const qualifies = currentPoints >= rank.points;
-    const hasRole   = gMember.roles.cache.has(rank.roleId);
-    if (qualifies && !hasRole) {
-      await gMember.roles.add(rank.roleId).catch(() => {});
-      gained.push(rank.name);
-    } else if (!qualifies && hasRole) {
-      await gMember.roles.remove(rank.roleId).catch(() => {});
-      lost.push(rank.name);
-    }
-  }
-  return { gained, lost };
-}
+import { syncRankRoles } from "../utils/ranks.js";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function dispatch(cmd: string, args: string[], message: Message, member: GuildMember, client: Client): Promise<any> {
@@ -1080,6 +1057,9 @@ async function dispatch(cmd: string, args: string[], message: Message, member: G
         });
       }
       const lines = result.entries.map((e, i) => `\`${i + 1}.\` **${e.name}** (<@${e.id}>)`).join("\n");
+      const rankUpLines = result.rankUps.length > 0
+        ? "\n\n**Rank Ups:**\n" + result.rankUps.map((r) => `🎖️ **${r.name}** unlocked **${r.ranks.join(", ")}**`).join("\n")
+        : "";
       const s = getGuild(guildId);
       const channelNote = s.queueChannel ? `\n\nfull results posted to <#${s.queueChannel}>` : "";
       return loading.edit({
@@ -1087,8 +1067,8 @@ async function dispatch(cmd: string, args: string[], message: Message, member: G
         embeds: [{
           color: WHITE,
           title: `Queue Ended — ${result.entries.length} joined`,
-          description: lines.slice(0, 3900) + channelNote,
-          footer: { text: "each member received +1 raid point" },
+          description: (lines + rankUpLines).slice(0, 3900) + channelNote,
+          footer: { text: `each member received +${result.pointsPerJoin} raid point${result.pointsPerJoin !== 1 ? "s" : ""}` },
           timestamp: ts(),
         }],
       });
@@ -1114,10 +1094,24 @@ async function dispatch(cmd: string, args: string[], message: Message, member: G
           color: WHITE,
           title: `Queue Log — ${log.count} joined so far`,
           description: lines.slice(0, 4000),
-          footer: { text: "queue is still active — run .endqueue to end it" },
+          footer: { text: `+${log.pointsPerJoin} pt${log.pointsPerJoin !== 1 ? "s" : ""} per join · run .endqueue to end · .queuepoints <n> to change` },
           timestamp: ts(),
         }],
       });
+    }
+
+    case "queuepoints": {
+      if (!admin() && !hasFullAccess(member, guildId, wl, "queuepoints")) {
+        return message.reply("you're not authorized to use that command");
+      }
+      const amount = parseInt(args[0] ?? "");
+      if (isNaN(amount) || amount < 1) return message.reply("`.queuepoints <number>` — e.g. `.queuepoints 2`");
+      if (!isQueueActive(guildId)) {
+        return message.reply("no queue is active — start one with `.queue` first");
+      }
+      const ok = setQueuePoints(guildId, amount);
+      if (!ok) return message.reply("couldn't update queue points");
+      return message.reply({ embeds: [{ color: WHITE, description: `queue updated — each JOIN will now give **+${amount}** raid point${amount !== 1 ? "s" : ""}`, timestamp: ts() }] });
     }
 
     case "setqueuechannel": {
