@@ -880,7 +880,7 @@ export async function handleSlashCommand(i: ChatInputCommandInteraction): Promis
       let backup: { files: Record<string, unknown> };
       try { backup = JSON.parse(raw); }
       catch { return i.editReply({ content: "that file is unreadable" }); }
-      if (!backup.files || typeof backup.files !== "object") return i.editReply({ content: "that doesn't look like a valid /x2k backup" });
+      if (!backup.files || typeof backup.files !== "object") return i.editReply({ content: "that doesn't look like a valid /curek backup" });
       const restored = restoreBackup(backup);
       await logInfo(guildId, "Backup Restored", `<@${i.user.id}> restored a backup (${restored} files)`);
       return i.editReply({ embeds: [{ color: WHITE, description: `restored **${restored}** files`, footer: { text: i.guild?.name ?? "bot" }, timestamp: ts() }] });
