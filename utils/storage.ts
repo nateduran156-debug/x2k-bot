@@ -35,6 +35,7 @@ export interface GuildSettings {
   rankRoles?: Array<{ roleId: string; points: number; name: string }>;
   approvedGroups?: Array<{ groupId: string; name: string }>;
   customTags?: string[];
+  queueChannel?: string;
 }
 
 export interface TicketData {
