@@ -15,6 +15,7 @@ import {
 import { buildLeaderboardEmbed, refreshLeaderboard } from "../utils/leaderboard.js";
 import { sendTicketPanel } from "./ticketHandler.js";
 import { logCommand, logPoints, logSetup, logInfo } from "../utils/botLogger.js";
+import { syncRankRoles } from "../utils/ranks.js";
 
 const WHITE    = 0xffffff;
 const GREEN    = 0x00cc55;
@@ -84,31 +85,6 @@ async function fetchImage(url: string): Promise<Buffer> {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return Buffer.from(await res.arrayBuffer());
-}
-
-async function syncRankRoles(
-  guild: Guild,
-  userId: string,
-  currentPoints: number,
-  ranks: Array<{ roleId: string; points: number; name: string }>,
-): Promise<{ gained: string[]; lost: string[] }> {
-  if (ranks.length === 0) return { gained: [], lost: [] };
-  const gMember = await guild.members.fetch(userId).catch(() => null);
-  if (!gMember) return { gained: [], lost: [] };
-  const gained: string[] = [];
-  const lost:   string[] = [];
-  for (const rank of ranks) {
-    const qualifies = currentPoints >= rank.points;
-    const hasRole   = gMember.roles.cache.has(rank.roleId);
-    if (qualifies && !hasRole) {
-      await gMember.roles.add(rank.roleId).catch(() => {});
-      gained.push(rank.name);
-    } else if (!qualifies && hasRole) {
-      await gMember.roles.remove(rank.roleId).catch(() => {});
-      lost.push(rank.name);
-    }
-  }
-  return { gained, lost };
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
