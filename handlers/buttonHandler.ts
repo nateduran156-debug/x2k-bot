@@ -6,7 +6,7 @@ import {
   memberHasVerificationManagerRole,
   getRegistered,
 } from "../utils/storage.js";
-import { getUserByUsername, isInGroup } from "../utils/roblox.js";
+import { getUserByUsername, isInGroup, acceptJoinRequest } from "../utils/roblox.js";
 import { isQueueActive, addJoiner } from "../utils/queue.js";
 import {
   showVerificationModal,
@@ -218,6 +218,58 @@ export async function handleButton(interaction: Interaction) {
       }
 
       return buttonInteraction.reply({ content: `kicked <@${ticket.userId}>.` });
+    }
+
+    if (customId === "ticket_accept_group") {
+      if (!ticket) {
+        return buttonInteraction.reply({
+          content: "couldn't find a ticket for this channel.",
+          ephemeral: true,
+        });
+      }
+
+      const clickedMember = buttonInteraction.member as import("discord.js").GuildMember | null;
+      const hasPermission =
+        clickedMember &&
+        memberHasVerificationManagerRole(clickedMember, buttonInteraction.guild!.id);
+
+      if (!hasPermission) {
+        return buttonInteraction.reply({
+          content: "you don't have permission to accept group requests.",
+          ephemeral: true,
+        });
+      }
+
+      if (!ticket.robloxUsername) {
+        return buttonInteraction.reply({
+          content: "no roblox username on this ticket.",
+          ephemeral: true,
+        });
+      }
+
+      const robloxUser = await getUserByUsername(ticket.robloxUsername).catch(() => null);
+      if (!robloxUser) {
+        return buttonInteraction.reply({
+          content: `couldn't find **${ticket.robloxUsername}** on Roblox.`,
+          ephemeral: true,
+        });
+      }
+
+      const guild = buttonInteraction.guild!;
+      const settings = getGuild(guild.id);
+      const groupId = settings.groupId ?? "703716156";
+
+      const result = await acceptJoinRequest(groupId, robloxUser.id);
+      if (!result.ok) {
+        return buttonInteraction.reply({
+          content: `failed to accept join request: ${result.reason}`,
+          ephemeral: true,
+        });
+      }
+
+      return buttonInteraction.reply({
+        content: `accepted **${ticket.robloxUsername}** into the group (\`${groupId}\`).`,
+      });
     }
 
     if (customId === "ticket_verify") {
