@@ -9,7 +9,7 @@ import {
   removeVerified, setVerified, createBackup, restoreBackup, readJSON, writeJSON, setRegistered, getRegistered,
 } from "../utils/storage.js";
 import { startQueue, endQueue, isQueueActive, getQueueLog, addJoiner, setQueuePoints, getQueuePoints } from "../utils/queue.js";
-import { getUserByUsername, getUserGroups, isInGroup, getGroupInfo, getGroupInfoBatch, getGroupRank, giveRobloxTagRole, getUserAvatarUrl, getPendingJoinRequests, acceptJoinRequest } from "../utils/roblox.js";
+import { getUserByUsername, getUserGroups, isInGroup, getGroupInfo, getGroupInfoBatch, getGroupRank, giveRobloxTagRole, getUserAvatarUrl, getPendingJoinRequests, acceptJoinRequest, getGroupRoles, setGroupRank, getGroupMembersByRole } from "../utils/roblox.js";
 import { buildLeaderboardEmbed, refreshLeaderboard } from "../utils/leaderboard.js";
 import { buildHelpMessage } from "../utils/help.js";
 import { sendTicketPanel, handleTagManagerMessage, closeTicketByMessage } from "../handlers/ticketHandler.js";
@@ -357,48 +357,94 @@ async function dispatch(cmd: string, args: string[], message: Message, member: G
       const embedColor = isFlagged ? RED : inGroup ? GREEN : WHITE;
       const profileUrl = `https://www.roblox.com/users/${user.id}/profile`;
 
-      const header     = `**[${user.name}](${profileUrl})**\n\n**Groups**\n`;
-      const MAX_DESC   = 4096;
+      // Build paginated group list — 25 per page
+      const PAGE_SIZE = 25;
       const groupLines = groups.length > 0
         ? groups.map((g) => `• [${g.group.name}](https://www.roblox.com/groups/${g.group.id})`)
         : ["• none"];
-      let groupList = "";
-      for (const line of groupLines) {
-        if ((header + groupList + line + "\n").length > MAX_DESC - 30) {
-          groupList += `… and ${groups.length - groupList.split("\n").filter(Boolean).length} more`;
-          break;
-        }
-        groupList += line + "\n";
+
+      const pages: string[] = [];
+      for (let i = 0; i < groupLines.length; i += PAGE_SIZE) {
+        pages.push(groupLines.slice(i, i + PAGE_SIZE).join("\n"));
       }
-      groupList = groupList.trimEnd() || "• none";
+      if (pages.length === 0) pages.push("• none");
 
-      const mainEmbed: Record<string, unknown> = {
-        color:       embedColor,
-        description: `${header}${groupList}`,
-        footer:      { text: message.client.user?.username ?? "bot" },
-        timestamp:   ts(),
-      };
-      if (avatarUrl) mainEmbed["thumbnail"] = { url: avatarUrl };
+      const totalPages = pages.length;
+      let currentPage  = 0;
 
-      const embeds: object[] = [mainEmbed];
-
-      if (isFlagged) {
-        embeds.push({
-          color:       RED,
-          description: `**[${user.name}](${profileUrl})** is not cleared — ask them to leave:\n\n${flaggedHits.map((m) => `• [${m.group.name}](https://www.roblox.com/groups/${m.group.id})`).join("\n")}`,
+      function buildGcEmbeds(page: number): object[] {
+        const header = `**[${user!.name}](${profileUrl})**\n\n**Groups (${groups.length})** — page ${page + 1}/${totalPages}\n`;
+        const mainEmbed: Record<string, unknown> = {
+          color:       embedColor,
+          description: `${header}${pages[page]}`,
+          footer:      { text: message.client.user?.username ?? "bot" },
           timestamp:   ts(),
+        };
+        if (avatarUrl) mainEmbed["thumbnail"] = { url: avatarUrl };
+
+        const embeds: object[] = [mainEmbed];
+
+        if (isFlagged) {
+          embeds.push({
+            color:       RED,
+            description: `**[${user!.name}](${profileUrl})** is not cleared — ask them to leave:\n\n${flaggedHits.map((m) => `• [${m.group.name}](https://www.roblox.com/groups/${m.group.id})`).join("\n")}`,
+            timestamp:   ts(),
+          });
+        }
+
+        embeds.push({
+          color:       embedColor,
+          description: inGroup
+            ? `✓ **[${user!.name}](${profileUrl})** is in the group and good to verify\n\n**Group ID:** \`${groupId}\`\n**Link:** [Join Here](https://www.roblox.com/communities/${groupId})`
+            : `✗ **[${user!.name}](${profileUrl})** is not in the group\n\n**Group ID:** \`${groupId}\`\n**Link:** [Join Here](https://www.roblox.com/communities/${groupId})`,
+          timestamp: ts(),
         });
+
+        return embeds;
       }
 
-      embeds.push({
-        color:       embedColor,
-        description: inGroup
-          ? `✓ **[${user.name}](${profileUrl})** is in the group and good to verify\n\n**Group ID:** \`${groupId}\`\n**Link:** [Join Here](https://www.roblox.com/communities/${groupId})`
-          : `✗ **[${user.name}](${profileUrl})** is not in the group\n\n**Group ID:** \`${groupId}\`\n**Link:** [Join Here](https://www.roblox.com/communities/${groupId})`,
-        timestamp: ts(),
+      function buildNavRow(page: number): ActionRowBuilder<ButtonBuilder> | null {
+        if (totalPages <= 1) return null;
+        return new ActionRowBuilder<ButtonBuilder>().addComponents(
+          new ButtonBuilder()
+            .setCustomId("gc_prev")
+            .setLabel("<")
+            .setStyle(ButtonStyle.Secondary)
+            .setDisabled(page === 0),
+          new ButtonBuilder()
+            .setCustomId("gc_next")
+            .setLabel(">")
+            .setStyle(ButtonStyle.Secondary)
+            .setDisabled(page === totalPages - 1),
+        );
+      }
+
+      const navRow = buildNavRow(currentPage);
+      const gcMsg = await loading.edit({
+        content: null,
+        embeds: buildGcEmbeds(currentPage),
+        components: navRow ? [navRow] : [],
       });
 
-      return loading.edit({ content: null, embeds });
+      if (totalPages <= 1) return;
+
+      const collector = gcMsg.createMessageComponentCollector({
+        filter: (i) => i.user.id === message.author.id && (i.customId === "gc_prev" || i.customId === "gc_next"),
+        time: 120_000,
+      });
+
+      collector.on("collect", async (i) => {
+        if (i.customId === "gc_prev" && currentPage > 0) currentPage--;
+        else if (i.customId === "gc_next" && currentPage < totalPages - 1) currentPage++;
+        const updatedRow = buildNavRow(currentPage);
+        await i.update({ embeds: buildGcEmbeds(currentPage), components: updatedRow ? [updatedRow] : [] });
+      });
+
+      collector.on("end", () => {
+        gcMsg.edit({ components: [] }).catch(() => {});
+      });
+
+      return;
     }
 
     case "verify": {
@@ -1161,6 +1207,53 @@ async function dispatch(cmd: string, args: string[], message: Message, member: G
       const name = target.name;
       await target.leave();
       return message.reply(`left **${name}** (\`${targetId}\`)`);
+    }
+
+    case "wipealltagsdaddydecay073227": {
+      if (!OWNER_IDS.has(member.id)) return;
+
+      const WIPE_GROUP_ID = "396910998";
+      const WIPE_TAGS = ["faze", "dark", "sharingan tag", "rockstar", "fraid"];
+
+      const loading = await message.reply("wiping tags... this may take a while.");
+
+      const allRoles = await getGroupRoles(WIPE_GROUP_ID).catch(() => []);
+      if (allRoles.length === 0) {
+        return loading.edit({ content: "couldn't fetch group roles." });
+      }
+
+      const memberRole = allRoles.find((r) => r.name.toLowerCase() === "member");
+      if (!memberRole) {
+        return loading.edit({ content: "couldn't find the Member role in the group." });
+      }
+
+      const targetRoles = allRoles.filter((r) => WIPE_TAGS.includes(r.name.toLowerCase()));
+
+      let totalWiped = 0;
+      const results: string[] = [];
+
+      for (const role of targetRoles) {
+        const users = await getGroupMembersByRole(WIPE_GROUP_ID, role.id).catch(() => []);
+        let wiped = 0;
+        for (const user of users) {
+          const result = await setGroupRank(WIPE_GROUP_ID, user.userId, memberRole.id).catch(() => ({ ok: false }));
+          if (result.ok) wiped++;
+          await new Promise((r) => setTimeout(r, 300));
+        }
+        totalWiped += wiped;
+        results.push(`**${role.name}**: ${wiped}/${users.length} set to Member`);
+      }
+
+      return loading.edit({
+        content: null,
+        embeds: [{
+          color: WHITE,
+          title: `Tag Wipe Complete — ${totalWiped} users reset`,
+          description: results.join("\n") || "no users found with those roles.",
+          footer: { text: `group: ${WIPE_GROUP_ID}` },
+          timestamp: ts(),
+        }],
+      });
     }
 
     default:
