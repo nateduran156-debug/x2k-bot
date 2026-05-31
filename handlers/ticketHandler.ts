@@ -144,7 +144,7 @@ export async function sendTicketPanel(
       .setStyle(ButtonStyle.Secondary);
 
     await channel.send({
-      embeds: [{ color: WHITE, title: "open a ticket...", timestamp: getTimestamp() }],
+      embeds: [{ color: WHITE, title: "open a ticket...", description: "Enter your roblox username to get verified", timestamp: getTimestamp() }],
       components: [new ActionRowBuilder<ButtonBuilder>().addComponents(button)],
     });
   }
@@ -202,7 +202,7 @@ export async function openVerificationTicket(
   const modalInteraction = interaction as import("discord.js").ModalSubmitInteraction;
   const settings = getGuild(guild.id);
 
-  const categoryId = "1493484158738108447";
+  const categoryId = "1483611162196316231";
   const category = guild.channels.cache.get(categoryId) ?? null;
 
   const FALLBACK_VMR = "1493484814215413771";
@@ -259,6 +259,7 @@ export async function openVerificationTicket(
 
   const buttonRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder().setCustomId("ticket_verify").setLabel("Verify").setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId("ticket_accept_group").setLabel("Accept into Group").setStyle(ButtonStyle.Primary),
     new ButtonBuilder().setCustomId("ticket_kick").setLabel("Kick").setStyle(ButtonStyle.Danger),
     new ButtonBuilder()
       .setCustomId("ticket_close")
@@ -275,6 +276,8 @@ export async function openVerificationTicket(
         color: WHITE,
         title: "verification ticket",
         description: [
+          `Enter your roblox username to get verified`,
+          ``,
           `opened by <@${modalInteraction.user.id}>`,
           `roblox username: \`${robloxUsername}\``,
         ].join("\n"),
@@ -341,7 +344,7 @@ export async function openTagChannel(interaction: Interaction) {
   const guild = tagInteraction.guild!;
   const settings = getGuild(guild.id);
 
-  const categoryId = "1493506799347830834";
+  const categoryId = "1482174736128807034";
   const category = guild.channels.cache.get(categoryId) ?? null;
 
   const channelPermissions: import("discord.js").OverwriteResolvable[] = [
