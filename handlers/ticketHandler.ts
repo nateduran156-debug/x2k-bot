@@ -34,6 +34,7 @@ async function kickDeniedUser(robloxUsername: string, tag: string): Promise<void
 }
 
 const WHITE = 0xffffff;
+const EMBED_THUMBNAIL = "https://www.image2url.com/r2/default/images/1780196374256-eb163aaa-3d42-40ca-8d15-a4d35084ebc0.png";
 
 const TAG_OPTIONS = [
   { label: "Sharingan Tag", value: "sharingan tag", description: "sharingan tag request" },
@@ -294,6 +295,7 @@ export async function postTagReviewEmbed(
     embeds: [{
       color: WHITE,
       title: "tag request — pending review",
+      thumbnail: { url: EMBED_THUMBNAIL },
       description: [
         `**User:** <@${interaction.user.id}>`,
         `**Roblox:** \`${robloxUsername}\``,
@@ -340,6 +342,7 @@ export async function handleTagApprove(interaction: import("discord.js").ButtonI
       embeds: [{
         color: WHITE,
         title: "tag approval failed",
+        thumbnail: { url: EMBED_THUMBNAIL },
         description: [
           `**User:** <@${ticket.userId}>`,
           `**Roblox:** \`${robloxUsername}\``,
@@ -373,6 +376,7 @@ export async function handleTagApprove(interaction: import("discord.js").ButtonI
     embeds: [{
       color: WHITE,
       title: "tag request approved",
+      thumbnail: { url: EMBED_THUMBNAIL },
       description: [
         `**User:** <@${ticket.userId}>`,
         `**Roblox:** \`${robloxUsername}\``,
@@ -420,6 +424,7 @@ export async function handleTagDeny(interaction: import("discord.js").ButtonInte
     embeds: [{
       color: WHITE,
       title: "tag request denied",
+      thumbnail: { url: EMBED_THUMBNAIL },
       description: [
         `**User:** <@${ticket.userId}>`,
         `**Roblox:** \`${ticket.robloxUsername ?? "unknown"}\``,
