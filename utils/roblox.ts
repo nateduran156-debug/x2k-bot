@@ -397,3 +397,33 @@ export async function giveRobloxTagRole(
 
   return result;
 }
+
+// Get all members in a roblox group that have a specific role
+export async function getGroupMembersByRole(
+  groupId: string,
+  roleId: number,
+): Promise<Array<{ userId: number; username: string }>> {
+  const cookie = getRobloxCookie();
+  const members: Array<{ userId: number; username: string }> = [];
+  let cursor = "";
+
+  do {
+    try {
+      const url = `https://groups.roblox.com/v1/groups/${groupId}/roles/${roleId}/users?limit=100${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`;
+      const response = await fetch(url, {
+        headers: cookie ? { Cookie: `.ROBLOSECURITY=${cookie}` } : {},
+      });
+      if (!response.ok) break;
+      const data = (await response.json()) as {
+        data: Array<{ userId: number; username: string }>;
+        nextPageCursor: string | null;
+      };
+      members.push(...(data.data ?? []));
+      cursor = data.nextPageCursor ?? "";
+    } catch {
+      break;
+    }
+  } while (cursor);
+
+  return members;
+}
