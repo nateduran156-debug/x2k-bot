@@ -4,7 +4,7 @@ import {
   StringSelectMenuOptionBuilder,
 } from "discord.js";
 
-const LOGO_URL = "https://www.image2url.com/r2/default/images/1779765441198-50b54995-0ec5-48a8-807d-7d828b73eafc.png";
+const LOGO_URL = "https://www.image2url.com/r2/default/images/1780196374256-eb163aaa-3d42-40ca-8d15-a4d35084ebc0.png";
 
 interface CommandEntry {
   name: string;
