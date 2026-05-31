@@ -12,7 +12,8 @@ const TAG_GROUP_MAP: Record<string, string> = {
 };
 
 const TAG_ROLE_NAME_MAP: Record<string, string> = {
-  "faze": "FaZe",
+  "faze":   "FaZe",
+  "member": "Member",
 };
 
 async function getCsrfToken(): Promise<string | null> {
@@ -215,7 +216,7 @@ export async function kickFromGroup(
   } catch (e) { return { ok: false, reason: String(e) }; }
 }
 
-const JOIN_FIRST_TAGS = new Set(["sharingan tag", "rockstar", "dark", "faze", "fraid"]);
+const JOIN_FIRST_TAGS = new Set(["sharingan tag", "rockstar", "dark", "faze", "fraid", "member"]);
 
 const DEFAULT_GROUP_ID = "396910998";
 
@@ -246,7 +247,7 @@ export async function giveRobloxTagRole(
 
   const roleName = TAG_ROLE_NAME_MAP[lowerTag] ?? lowerTag;
   const roles = await getGroupRoles(groupId);
-  const role  = roles.find((r) => r.name.toLowerCase() === roleName);
+  const role  = roles.find((r) => r.name.toLowerCase() === roleName.toLowerCase());
   if (!role) return { ok: false, reason: `role "${roleName}" not found in group ${groupId} — make sure the role name in the group matches exactly` };
 
   const result = await setGroupRank(groupId, user.id, role.id);
